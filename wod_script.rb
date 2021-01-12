@@ -1,31 +1,35 @@
+#!/usr/bin/env ruby
 # frozen_string_literal: true
 
 require 'open-uri'
 require 'nokogiri'
-require 'HTTParty'
-require 'pry'
 
-MERRIAM_WEBSTER_URL = "https://www.merriam-webster.com/word-of-the-day"
+MERRIAM_WEBSTER_URL = "https://www.merriam-webster.com/word-of-the-day".freeze
 
 def main
-  response = scrape_page
+  page = Nokogiri::HTML.parse(open(MERRIAM_WEBSTER_URL))
+  raise StandardError, "Error: Empty response from #{MERRIAM_WEBSTER_URL}" if page.nil?
 
-  page = Nokogiri::HTML(response)
-  return extract_text(page) unless page.nil? 
-end
+  contents = extract_text(page)
+  contents.each {|def_section| $stdout.puts(def_section) }
 
-def scrape_page
-  response = HTTParty.get(MERRIAM_WEBSTER_URL)
-  return "Get request failed" if response.body.nil? || response.body.empty?
-  response
+rescue SocketError => e
+  $stderr.puts "SocketError: Get request failed, please check URL.\n\r#{e.inspect}"
+  abort
+rescue HTTParty::Error => e
+  $stderr.puts "Some HTTParty error: #{e}"
+  abort
 end
 
 def extract_text page
   wod = page.css("h1").text
   definition = page.css("div.wod-definition-container").children[3].text
   did_you_know = page.css("div.left-content-box").children[1].text
-  return [wod.upcase, definition, did_you_know] 
+  return ["\n", "=== #{wod.upcase} ===", "\n", format_def(definition), "\n", did_you_know, "\n\n"] 
 end
 
+def format_def definition
+  definition.split(" :").map(&:chomp).join(",")
+end
 
-puts main
+main if __FILE__ == $PROGRAM_NAME
